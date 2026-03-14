@@ -1,0 +1,181 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ModalityCategory {
+  CAR_T
+  TCR
+  NK
+  OTHER
+}
+
+enum TrialPhase {
+  EARLY_PHASE_1
+  PHASE_1
+  PHASE_1_2
+  PHASE_2
+  PHASE_2_3
+  PHASE_3
+  PHASE_4
+  NA
+  UNKNOWN
+}
+
+enum RecruitmentStatus {
+  NOT_YET_RECRUITING
+  RECRUITING
+  ACTIVE_NOT_RECRUITING
+  COMPLETED
+  TERMINATED
+  SUSPENDED
+  WITHDRAWN
+  ENROLLING_BY_INVITATION
+  UNKNOWN
+}
+
+enum IngestionSource {
+  CLINICALTRIALS_GOV
+  PUBMED
+  MANUAL
+}
+
+enum IngestionStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+}
+
+model Company {
+  id             String    @id @default(cuid())
+  name           String
+  normalizedName String    @unique
+  website        String?
+  hqCountry      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  programs       Program[]
+}
+
+model Modality {
+  id        String           @id @default(cuid())
+  name      String           @unique
+  category  ModalityCategory
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  programs  Program[]
+}
+
+model Target {
+  id             String          @id @default(cuid())
+  name           String
+  normalizedName String          @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  programTargets ProgramTarget[]
+}
+
+model Indication {
+  id             String             @id @default(cuid())
+  name           String
+  normalizedName String             @unique
+  therapeuticArea String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  leadPrograms   Program[]          @relation("LeadIndication")
+  programIndications ProgramIndication[]
+}
+
+model Program {
+  id                  String               @id @default(cuid())
+  name                String
+  slug                String               @unique
+  summary             String?
+  companyId           String
+  modalityId          String
+  leadIndicationId    String?
+  active              Boolean              @default(true)
+  sourceUpdatedAt     DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  company             Company              @relation(fields: [companyId], references: [id])
+  modality            Modality             @relation(fields: [modalityId], references: [id])
+  leadIndication      Indication?          @relation("LeadIndication", fields: [leadIndicationId], references: [id])
+  programTargets      ProgramTarget[]
+  programClinicalTrials ProgramClinicalTrial[]
+  programIndications  ProgramIndication[]
+
+  @@index([companyId])
+  @@index([modalityId])
+  @@index([leadIndicationId])
+}
+
+model ProgramTarget {
+  programId  String
+  targetId   String
+  isPrimary  Boolean  @default(false)
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  target     Target   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([programId, targetId])
+}
+
+model ProgramIndication {
+  programId    String
+  indicationId String
+  isLead       Boolean   @default(false)
+  program      Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+  indication   Indication @relation(fields: [indicationId], references: [id], onDelete: Cascade)
+
+  @@id([programId, indicationId])
+}
+
+model ClinicalTrial {
+  id                    String               @id @default(cuid())
+  nctId                 String               @unique
+  title                 String
+  officialTitle         String?
+  phase                 TrialPhase           @default(UNKNOWN)
+  recruitmentStatus     RecruitmentStatus    @default(UNKNOWN)
+  studyType             String?
+  startDate             DateTime?
+  primaryCompletionDate DateTime?
+  completionDate        DateTime?
+  lastVerifiedDate      DateTime?
+  sourceLastUpdatePosted DateTime?
+  sourceUrl             String?
+  rawSource             Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  programClinicalTrials ProgramClinicalTrial[]
+
+  @@index([phase])
+  @@index([recruitmentStatus])
+}
+
+model ProgramClinicalTrial {
+  programId       String
+  clinicalTrialId String
+  relationshipType String @default("PRIMARY")
+  program         Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  clinicalTrial   ClinicalTrial @relation(fields: [clinicalTrialId], references: [id], onDelete: Cascade)
+
+  @@id([programId, clinicalTrialId])
+}
+
+model IngestionRun {
+  id             String          @id @default(cuid())
+  source         IngestionSource
+  status         IngestionStatus
+  startedAt      DateTime        @default(now())
+  finishedAt     DateTime?
+  recordsFetched Int             @default(0)
+  recordsCreated Int             @default(0)
+  recordsUpdated Int             @default(0)
+  errorMessage   String?
+}
